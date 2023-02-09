@@ -18,13 +18,8 @@
 int main(void) {
 	struct pList plist;
 	struct mList mlist;
-	int i;
-	char c = 'c';
 	list_init(&plist,&mlist);
-	update_boolean_value(&c, 0, 0);
-	printf("updated c is %c\n", c);
-	print_boolean(&c, 1);
-	list_free(plist, mlist);
+	list_free(&plist,&mlist);
 	return 0;
 }
 
@@ -72,7 +67,7 @@ char * print_class(player* p)
 	int i;
 	for(i=0;i<3;i++)
 	{
-		class += get_boolean_value(p->status, i)*pow(2,i);
+		class += get_boolean_value(&(p->status), i)*pow(2,i);
 	}
 	switch(i){
 	case 0:
@@ -99,7 +94,20 @@ char * print_class(player* p)
 
 void attackMonster (player *p, monster *m)
 {
-
+	int roll;
+	int stunned;
+	int blinded;
+	int silenced;
+	int attack_type;
+	attack_type = get_boolean_value(&(p->status),3);
+	stunned = get_boolean_value(&(p->status),5);
+	blinded = get_boolean_value(&(p->status),6);
+	silenced = get_boolean_value(&(p->status),7);
+	if(stunned)
+		return;
+	roll = (((silenced&&attack_type)||(blinded&&!attack_type))
+			&&rand()%2) ? 0: rand()%10+1-m->def+p->atk;
+	m->hp-=roll;
 }
 
 player * newPlayer(char *name)
@@ -108,8 +116,9 @@ player * newPlayer(char *name)
 	int i;
 	int atk_type;
 	int random;
+	player *p;
 	atk_type=0;
-	player *p = (player*)malloc(sizeof(player));
+	p = (player*)malloc(sizeof(player));
 	p->name = name;
 	p->hp = rand()%201 + 100;
 	p->atk = rand()%21 + 5;
@@ -127,22 +136,45 @@ player * newPlayer(char *name)
 	p->attackMonster = &attackMonster;
 	p->print_class = &print_class;
 	p->newPlayer = &newPlayer;
+	p->status_update = &status_update;
 	return p;
+}
+
+void status_update(player* p)
+{
+	int i;
+	int remaining;
+	for(i=0;i<4;i++)
+	{
+		remaining = get_boolean_value(&(p->status_track),i*2) + 2*get_boolean_value(&(p->status_track),i*2 + 1) - 1;
+		if(remaining%2==0)
+			update_boolean_value(&(p->status_track),i*2, 0);
+		else
+			update_boolean_value(&(p->status_track),i*2, 1);
+		if(remaining>=2)
+			update_boolean_value(&(p->status_track),i*2+1, 1);
+		else
+			update_boolean_value(&(p->status_track),i*2+1, 0);
+		if(remaining==0)
+			update_boolean_value(&(p->status),i+4, 0);
+	}
 }
 
 void printMonsterInformation (monster *m)
 {
-
+	printf("========Monster Profile========\n");
+	printf("ID- %d\n",m->id);
+	printf("HP- %d\nAttack Point- %d\nDefense Point- %d\n",m->hp,m->atk,m->def);
 }
 
 monster * newMonster()
 {
 	monster* m = (monster*)malloc(sizeof(monster));
 	m->hp = rand()%1001 + 1000;
-	m->atk = rand()%21+5;
-	m->def = rand()%11;
+	m->atk = rand()%21 + 5;
+	m->def = rand()%10;
 	m->id = (int) time(NULL);
-	m->status_rate = 4;
+	m->success_rate = 4;
 	m->printMonsterInformation = &printMonsterInformation;
 	m->newMonster = &newMonster;
 	m->attackPlayer = & attackPlayer;
@@ -151,7 +183,24 @@ monster * newMonster()
 
 int attackPlayer(player *p, monster *m)
 {
-
+	int roll;
+	int stat;
+	if(rand()%4==0)
+	{
+		roll = rand()%5 + 1 + m->atk - p->def;
+		if(get_boolean_value(&(p->status),4)==1)
+			roll+= roll/4;
+		if(rand()%m->success_rate==0)
+		{
+			stat = rand()%4;
+			update_boolean_value(&(p->status), stat + 4 , 1);
+			update_boolean_value(&(p->status_track), stat*2 , 1);
+			update_boolean_value(&(p->status_track), stat*2 + 1 , 1);
+		}
+		p->hp -= roll;
+		return 1;
+	}
+	return 0;
 }
 
 void list_free(struct pList* plist,struct mList* mlist)
@@ -174,11 +223,15 @@ void list_init (struct pList* plist,struct mList* mlist)
 	int i;
 	struct player p;
 	struct monster m;
+	printf("Now Loading...\n");
 	p.newPlayer = &newPlayer;
+	m.newMonster = &newMonster;
 	plist->list = (player**)malloc(4*sizeof(player*));
 	mlist->list = (monster**)malloc(6*sizeof(monster*));
 	plist->size=0;
 	mlist->size=0;
+	plist->on_p_death = &on_p_death;
+	mlist->on_m_death = &on_m_death;
 	for(i =0; i<4; i++)
 	{
 		plist->list[i] = p.newPlayer("test");
@@ -186,8 +239,31 @@ void list_init (struct pList* plist,struct mList* mlist)
 	}
 	for(i =0; i<(rand()%6+1); i++)
 	{
-		mlist->list[i] = (monster*)malloc(sizeof(monster));
+		mlist->list[i] = m.newMonster();
 		mlist->size+=1;
 	}
+	printf("Loading Completed.\n");
+}
+
+void on_p_death(struct pList* plist, int i)
+{
+	int k;
+	free(plist->list[i]);
+	for(k=i;k<plist->size-1;k++)
+	{
+		plist->list[i] = plist->list[i+1];
+	}
+	plist->size-=1;
+}
+
+void on_m_death(struct mList* mlist, int i)
+{
+	int k;
+	free(mlist->list[i]);
+	for(k=i;k<mlist->size-1;k++)
+	{
+		mlist->list[i] = mlist->list[i+1];
+	}
+	mlist->size-=1;
 }
 
