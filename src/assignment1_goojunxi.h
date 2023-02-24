@@ -18,7 +18,7 @@ typedef struct monsterList mList;
 typedef struct charList cList;
 
 /*
-status boolean = [class][attack type][poison][stun][blinded][silent]
+status boolean = [class][attack type][poison][stun][Silent][Blind]
 status_check = [Poison][Stun][Silent][Blind]
 attack type : 1 = magical attack, 0 = physical attack
 */
@@ -50,6 +50,7 @@ struct pList
 {
 	player** list;
 	int size;
+	int init_size;
 	void (*on_p_death) (struct pList* plist,int i);
 };
 
@@ -57,6 +58,7 @@ struct mList
 {
 	monster** list;
 	int size;
+	int init_size;
 	void (*on_m_death) (struct mList* mlist, int i);
 };
 
@@ -77,4 +79,5 @@ void list_free(struct pList* plist,struct mList* mlist);
 void list_init (struct pList* plist,struct mList* mlist);
 void on_p_death(struct pList* plist, int i);
 void on_m_death(struct mList* mlist, int i);
+void print_profile(struct pList* plist, struct mList* mlist);
 #endif /* ASSIGNMENT1_GOOJUNXI_H_ */
